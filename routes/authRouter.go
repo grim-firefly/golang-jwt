@@ -6,6 +6,6 @@ import (
 )
 
 func AuthRoutes(router *chi.Mux) {
-	router.Post("/users/signup", controller.SignUp)
-	router.Post("/users/signup", controller.Login)
+	router.Post("/signup", controller.SignUp)
+	router.Post("/login", controller.Login)
 }

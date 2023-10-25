@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/grim-firefly/golang-jwt/database"
@@ -12,6 +13,23 @@ import (
 var DB *gorm.DB = database.GetDB()
 
 func SignUp(w http.ResponseWriter, r *http.Request) {
+	var newUser models.User
+	err := json.NewDecoder(r.Body).Decode(&newUser)
+	if err != nil {
+		panic(err)
+		return
+	}
+	newUser.User_type = "User"
+	Err := DB.Create(&newUser)
+	if Err != nil {
+		helpers.ResponseJson(w, 502, struct {
+			message string
+		}{
+			message: "Error Creating User",
+		})
+
+	}
+	helpers.ResponseJson(w, 200, newUser)
 
 }
 

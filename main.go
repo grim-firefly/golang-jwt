@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/grim-firefly/golang-jwt/migration"
 	"github.com/grim-firefly/golang-jwt/routes"
 )
 
@@ -14,5 +15,10 @@ func main() {
 	})
 	routes.AuthRoutes(router)
 	routes.UserRoutes(router)
+
+	// migration
+
+	migration.Migrate()
+	// migration ends
 	http.ListenAndServe(":8080", router)
 }
