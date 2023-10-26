@@ -7,5 +7,5 @@ import (
 
 func UserRoutes(router *chi.Mux) {
 	router.Get("/users", controller.GetUsers)
-	router.Get("/users/{user_id}", controller.GetUser)
+	router.Get("/users/{id}", controller.GetUser)
 }
