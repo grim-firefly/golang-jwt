@@ -2,12 +2,15 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/mail"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/grim-firefly/golang-jwt/database"
 	"github.com/grim-firefly/golang-jwt/helpers"
 	"github.com/grim-firefly/golang-jwt/models"
@@ -75,8 +78,52 @@ func SignUp(w http.ResponseWriter, r *http.Request) {
 
 }
 
+type Credentials struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 // login
 func Login(w http.ResponseWriter, r *http.Request) {
+
+	var credential Credentials
+	err := json.NewDecoder(r.Body).Decode(&credential)
+	if err != nil {
+		data := make(map[string]string)
+		data["message"] = "Error"
+		helpers.ResponseJson(w, http.StatusOK, map[string]string{
+			"message": "Error",
+		})
+		return
+	}
+	var exUser models.User
+	if DB.Where("email = ? ", credential.Email).Select("id", "email", "password").First(&exUser).Error != nil {
+		helpers.ResponseJson(w, http.StatusOK, map[string]string{
+			"message": "Invalid Email or Password",
+		})
+		return
+	}
+	if exUser.Password != credential.Password {
+		helpers.ResponseJson(w, http.StatusOK, map[string]string{
+			"message": "Password is not matched",
+		})
+		return
+	}
+
+	//jwt  token creating
+	claims := jwt.MapClaims{
+		"id":     exUser.ID,
+		"email":  exUser.Email,
+		"expire": time.Now().Add(time.Minute * 5).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte("secret"))
+	exUser.Token = tokenString
+	// jwt token ends
+
+	helpers.ResponseJson(w, http.StatusOK, exUser)
+
+	// helpers.ResponseJson(w, http.StatusOK, Credential) ]
 
 }
 
@@ -102,4 +149,76 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	helpers.ResponseJson(w, http.StatusOK, user)
+}
+
+// for validating token
+func Validation(w http.ResponseWriter, r *http.Request) {
+	if r.Header["Token"] != nil {
+		tokenString := r.Header["Token"][0]
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			// Don't forget to validate the alg is what you expect:
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				helpers.ResponseJson(w, http.StatusUnauthorized, map[string]string{
+					"message": "Unauthorized",
+				})
+				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			}
+
+			// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
+			return []byte("secret"), nil
+		})
+		if err != nil {
+			helpers.ResponseJson(w, http.StatusUnauthorized, map[string]string{
+				"message": "Unauthorized",
+			})
+		}
+		if claim, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+			helpers.ResponseJson(w, http.StatusUnauthorized, map[string]interface{}{
+				"message": "Authorization Successfull",
+				"expire":  claim["expire"],
+				"email":   claim["email"],
+			})
+		} else {
+			helpers.ResponseJson(w, http.StatusUnauthorized, map[string]string{
+				"message": "Unauthorized",
+			})
+		}
+
+		// jwt.ParseWithClaims(token)
+	}
+}
+
+// for refreshing token
+func RefreshToken(w http.ResponseWriter, r *http.Request) {
+	tokenString := r.Header["Token"][0]
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
+		return []byte("secret"), nil
+	})
+
+	if err != nil {
+		helpers.ResponseJson(w, http.StatusUnauthorized, map[string]string{
+			"message": "Unauthorized",
+		})
+		return
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		claims["expire"] = time.Now().Add(time.Minute * 5).Unix()
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, _ := token.SignedString([]byte("secret"))
+
+		helpers.ResponseJson(w, http.StatusUnauthorized, map[string]string{
+			"message": "Authorization Successfull",
+			"Token":   tokenString,
+		})
+	} else {
+		helpers.ResponseJson(w, http.StatusUnauthorized, map[string]string{
+			"message": "Unauthorized",
+		})
+	}
 }
